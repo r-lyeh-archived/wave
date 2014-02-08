@@ -1,7 +1,6 @@
 // Simple OpenAL wrapper. Based on code by Emil Persson.
 // - rlyeh, 2013. MIT licensed.
 // @todo: doppler: alDopplerFactor, alSpeedOfSound
-// @todo: playonce( int src );
 
 #pragma once
 
@@ -16,26 +15,27 @@ namespace wave {
 
 struct sound
 {
-    ALenum format;
-    ALuint buffer;
-//    bool ok;
+    std::string path, type;
 
-    short *samples;
-    int sampleRate;
-    int size;
+    ALenum format = 0;
+    ALuint buffer = 0;
+
+    short *samples = 0;
+    int sampleRate = 0;
+    int size = 0;
+    double seconds = 0;
 
     bool load( const std::string &pathfile );
     bool load( const std::string &type, const void *data, size_t size );
     void unload();
 
-    double seconds() const;
+    bool ok() const;
 };
 
 struct speaker
 {
-    ALuint source;
-    ALuint buffer;
-//    bool ok;
+    ALuint source = 0;
+    ALuint buffer = 0;
 
     bool create();
     bool bind( int buffer );
@@ -56,6 +56,9 @@ struct speaker
     void stop();
     void pause();
     bool is_playing() const;
+    bool ok() const;
+
+    void play( const sound &snd, void (*efxpre)(int) = 0, void (*efxpost)(int) = 0 );
 };
 
 struct listener
@@ -68,9 +71,8 @@ struct listener
 
 struct device
 {
-    ALCdevice *dev;
-    ALCcontext *ctx;
-//    bool ok;
+    ALCdevice *dev = 0;
+    ALCcontext *ctx = 0;
 
     wave::listener listener;
     std::vector<sound> sounds;
@@ -88,13 +90,13 @@ struct device
     void clear();
     void reset();
 
-     int insert_sound( sound &source );
-    void erase_sound( int sound );
+    unsigned insert_sound( sound &source );
+        void erase_sound( unsigned sound );
 
-     int insert_speaker( speaker &source );
-    void erase_speaker( int source );
+    unsigned insert_speaker( speaker &source );
+        void erase_speaker( unsigned source );
 
-     int playonce( const std::string &pathfile, void (*efxpre)(int) = 0, void (*efxpost)(int) = 0 );
+    bool ok() const;
 };
 
 std::vector< std::string > enumerate();

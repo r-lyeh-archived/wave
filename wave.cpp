@@ -165,7 +165,7 @@ namespace
             return true;
 
         std::stringstream ss;
-        ss << "<moon9/audio/device.cpp> says: OpenAL error! ";
+        ss << "<wave/wave.cpp> says: OpenAL error! ";
         ss << error( errorno );
         ss << " at " << file << ':' << line;
 
@@ -329,36 +329,6 @@ namespace
     int numcontexts = 0;
 }
 
-int device::playonce( const std::string &pathfile, void (*efxpre)(int), void (*efxpost)(int) )
-{
-    sound snd;
-
-    if( !snd.load( pathfile ) )
-        return -1;
-
-    //std::cout << "seconds " << snd.seconds() << std::endl;
-
-    insert_sound( snd );
-
-    speaker src;
-
-    src.create();
-    src.bind( snd.buffer );
-
-if( efxpre )
-    (*efxpre)( src.source );
-
-    src.play();
-
-if( efxpost )
-    (*efxpost)( src.source );
-
-    // @todo : implement remove flags @sourcePlay()
-
-    return insert_speaker( src );
-}
-
-
 bool device::init( int devnum )
 {
     alcInit();
@@ -433,18 +403,13 @@ void device::quit()
     alcDeinit();
 }
 
-void device::clear()
-{
-    int index = int(sounds.size());
-    while( index-- )
-    {
-        erase_sound(index);
+void device::clear() {
+    for( unsigned index = sounds.size(); index-- != 0; ) {
+        erase_sound( index );
     }
 
-    index = int(speakers.size());
-    while( index-- )
-    {
-        erase_speaker(index);
+    for( unsigned index = speakers.size(); index-- != 0; ) {
+        erase_speaker( index );
     }
 }
 
@@ -459,7 +424,7 @@ void device::reset()
     insert_sound( snd );
 }
 
-int device::insert_sound( sound &source )
+unsigned device::insert_sound( sound &source )
 {
     for( unsigned i = 0; i < sounds.size(); i++ )
     {
@@ -474,7 +439,7 @@ int device::insert_sound( sound &source )
     return sounds.size() - 1;
 }
 
-void device::erase_sound( int _sound ) {
+void device::erase_sound( unsigned _sound ) {
     auto &sound = sounds[_sound];
 
     if( !sound.samples )
@@ -492,7 +457,7 @@ void device::erase_sound( int _sound ) {
     sound.unload();
 }
 
-int device::insert_speaker( speaker &source ) {
+unsigned device::insert_speaker( speaker &source ) {
     for( unsigned i = 0; i < speakers.size(); i++ ) {
         if( !speakers[i].buffer ) {
             speakers[i] = source;
@@ -504,8 +469,12 @@ int device::insert_speaker( speaker &source ) {
     return speakers.size() - 1;
 }
 
-void device::erase_speaker( int source ) {
+void device::erase_speaker( unsigned source ) {
     speakers[source].purge();
+}
+
+bool device::ok() const {
+    return dev && ctx;
 }
 
 // --------------------------------------------------------------------------
@@ -550,6 +519,11 @@ bool sound::load( const std::string &type, const void *data, size_t size ) {
 
     if( !size )
         return false;
+
+    unload();
+
+    this->path = "mem://";
+    this->type = type;
 
     // Clear error flag
     alGetError();
@@ -620,6 +594,19 @@ bool sound::load( const std::string &type, const void *data, size_t size ) {
         return "something went wrong", false;
     }
 
+    seconds = 0;
+    if( buffer && samples ) {
+        ALint size, bits, channels, freq;
+
+        $alGetBufferi(buffer, AL_SIZE, &size);
+        $alGetBufferi(buffer, AL_BITS, &bits);
+        $alGetBufferi(buffer, AL_CHANNELS, &channels);
+        $alGetBufferi(buffer, AL_FREQUENCY, &freq);
+
+        if( alGetError() == AL_NO_ERROR )
+            seconds = (ALfloat)((ALuint)size/channels/(bits/8)) / (ALfloat)freq;
+    }
+
     return true;
 }
 
@@ -634,7 +621,9 @@ bool sound::load( const std::string &pathfile ) {
     if( str.empty() )
         return "cannot open file", false;
 
-    return load( type, &str[0], str.size() );
+    bool result = load( type, &str[0], str.size() );
+    this->path = pathfile;
+    return result;
 }
 
 void sound::unload() {
@@ -651,28 +640,23 @@ void sound::unload() {
     }
 }
 
-double sound::seconds() const {
-    ALint size, bits, channels, freq;
-
-    $alGetBufferi(buffer, AL_SIZE, &size);
-    $alGetBufferi(buffer, AL_BITS, &bits);
-    $alGetBufferi(buffer, AL_CHANNELS, &channels);
-    $alGetBufferi(buffer, AL_FREQUENCY, &freq);
-
-    if( alGetError() != AL_NO_ERROR )
-        return 0.f;
-
-    return (ALfloat)((ALuint)size/channels/(bits/8)) / (ALfloat)freq;
+bool sound::ok() const {
+    return samples && buffer;
 }
 
 // ---------------------------------------------------------------------------
 
 bool speaker::create() {
+    if( source )
+        return true;
     $alGenSources( 1, &source );
     return source > 0;
 }
 
 bool speaker::bind( int buffer ) {
+    if( this->buffer )
+        unbind();
+
     this->buffer = buffer;
 
     loop( false );
@@ -771,6 +755,18 @@ void speaker::distance( const float mind, const float maxd ) {
     $alSourcef( source, AL_MAX_DISTANCE, maxd );
 }
 */
+
+bool speaker::ok() const {
+    return source && buffer;
+}
+
+void speaker::play( const sound &snd, void (*efxpre)(int), void (*efxpost)(int) ) {
+    create();
+    bind( snd.buffer );
+    if( efxpre ) (*efxpre)( source );
+    play();
+    if( efxpost ) (*efxpost)( source );
+}
 
 // ----------------------------------------------------------------------------
 
