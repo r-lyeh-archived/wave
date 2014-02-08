@@ -20,28 +20,52 @@
 
 #include "config.h"
 
+#include <signal.h>
+
 #include "alMain.h"
 #include "AL/alc.h"
 #include "alError.h"
 
-AL_API ALenum AL_APIENTRY alGetError(ALvoid)
+ALboolean TrapALError = AL_FALSE;
+
+ALvoid alSetError(ALCcontext *Context, ALenum errorCode)
+{
+    if(TrapALError)
+    {
+#ifdef _WIN32
+        /* DebugBreak will cause an exception if there is no debugger */
+        if(IsDebuggerPresent())
+            DebugBreak();
+#elif defined(SIGTRAP)
+        raise(SIGTRAP);
+#endif
+    }
+    CompExchangeInt(&Context->LastError, AL_NO_ERROR, errorCode);
+}
+
+AL_API ALenum AL_APIENTRY alGetError(void)
 {
     ALCcontext *Context;
     ALenum errorCode;
 
-    Context = GetContextSuspended();
-    if(!Context) return AL_INVALID_OPERATION;
+    Context = GetContextRef();
+    if(!Context)
+    {
+        if(TrapALError)
+        {
+#ifdef _WIN32
+            if(IsDebuggerPresent())
+                DebugBreak();
+#elif defined(SIGTRAP)
+            raise(SIGTRAP);
+#endif
+        }
+        return AL_INVALID_OPERATION;
+    }
 
-    errorCode = Context->LastError;
-    Context->LastError = AL_NO_ERROR;
+    errorCode = ExchangeInt(&Context->LastError, AL_NO_ERROR);
 
-    ProcessContext(Context);
+    ALCcontext_DecRef(Context);
 
     return errorCode;
-}
-
-ALvoid alSetError(ALCcontext *Context, ALenum errorCode)
-{
-    if(Context->LastError == AL_NO_ERROR)
-        Context->LastError = errorCode;
 }

@@ -99,6 +99,7 @@ struct device
     bool ok() const;
 };
 
+std::string info();
 std::vector< std::string > enumerate();
 
 }

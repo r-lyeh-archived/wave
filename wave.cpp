@@ -16,6 +16,30 @@
 
 #include "wave.hpp"
 
+namespace {
+    bool alcInit() {
+        ALCdevice *device;
+        device = alcOpenDevice(NULL);
+        return device ? true : "Could not open a device!", false;
+    }
+
+    void alcDeinit() {
+        ALCdevice *device;
+        ALCcontext *ctx;
+
+        ctx = alcGetCurrentContext();
+        if(ctx == NULL)
+            return;
+
+        device = alcGetContextsDevice(ctx);
+
+        alcMakeContextCurrent(NULL);
+        alcDestroyContext(ctx);
+        alcCloseDevice(device);
+    }
+
+}
+
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "shell32.lib")
 
@@ -291,42 +315,41 @@ namespace
 
 }
 
-
-
-std::vector<std::string> enumerate()
-{
+std::string info() {
     alcInit();
 
-    //  std::stringstream ss;
-    //  if ($alGetString(AL_VERSION))
-    //      ss << "OpenAL version: " << $alGetString(AL_VERSION) << std::endl;
-    //  if ($alGetString(AL_RENDERER))
-    //      ss << "OpenAL renderer: " << $alGetString(AL_RENDERER) << std::endl;
-    //  if ($alGetString(AL_VENDOR))
-    //      ss << "OpenAL vendor: " << $alGetString(AL_VENDOR) << std::endl;
-    //  if ($alGetString(AL_EXTENSIONS))
-    //      ss << "OpenAL extensions: " << $alGetString(AL_EXTENSIONS) << std::endl;
+    std::stringstream ss;
+    if ($alGetString(AL_VERSION))
+        ss << "OpenAL version: " << $alGetString(AL_VERSION) << std::endl;
+    if ($alGetString(AL_RENDERER))
+        ss << "OpenAL renderer: " << $alGetString(AL_RENDERER) << std::endl;
+    if ($alGetString(AL_VENDOR))
+        ss << "OpenAL vendor: " << $alGetString(AL_VENDOR) << std::endl;
+    if ($alGetString(AL_EXTENSIONS))
+        ss << "OpenAL extensions: " << $alGetString(AL_EXTENSIONS) << std::endl;
+
+    alcDeinit();
+
+    return ss.str();
+}
+
+std::vector<std::string> enumerate() {
+    alcInit();
 
     std::vector<std::string> vs;
 
-    if( $alcIsExtensionPresent( NULL, (const ALCchar *)"ALC_ENUMERATION_EXT" ) == AL_TRUE )
-    {
-        const char *s = (const char *)$alcGetString( NULL, ALC_DEVICE_SPECIFIER );
-        while( *s != '\0' )
-        {
-            vs.push_back( s );
-            while( *s++ != '\0' );
+    if( $alcIsExtensionPresent( NULL, (const ALCchar *)"ALC_ENUMERATION_EXT" ) == AL_TRUE ) {
+        const char *devices = (const char *)$alcGetString( NULL, ALC_ALL_DEVICES_SPECIFIER );
+
+        while( std::string(devices).size() ) {
+            vs.push_back(devices);
+            devices += vs.back().size() + 1;
         }
     }
 
     alcDeinit();
 
     return vs;
-}
-
-namespace
-{
-    int numcontexts = 0;
 }
 
 bool device::init( int devnum )
