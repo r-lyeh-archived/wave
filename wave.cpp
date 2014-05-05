@@ -14,6 +14,100 @@
 #include <AL/efx.h>
 //#include <AL/efx-creative.h>
 
+#include <mpc/mpcdec.h>
+#include <mpc/reader.h>
+#include "../libmpcdec/decoder.h"
+#include "../libmpcdec/internal.h"
+#include <mpc/reader.h>
+extern "C" {
+#define STDIO_MAGIC 0xF36D656D ///< Just a random safe-check value...
+typedef struct mpc_reader_mem_t {
+    unsigned char *p_file;
+    unsigned char *p_begin, *p_end;
+    mpc_bool_t  is_seekable;
+    mpc_int32_t magic;
+} mpc_reader_mem;
+/// mpc_reader callback implementations
+static mpc_int32_t
+read_mem(mpc_reader *p_reader, void *ptr, mpc_int32_t size) {
+    mpc_reader_mem *p_mem = (mpc_reader_mem*) p_reader->data;
+    if(p_mem->magic != STDIO_MAGIC) return MPC_STATUS_FAIL;
+    mpc_int32_t max = ( p_mem->p_end - p_mem->p_file );
+    if ( size >= max ) size = max;
+    memcpy( (unsigned char *)ptr, p_mem->p_file, size );
+    p_mem->p_file += size;
+    return size;
+}
+static mpc_bool_t
+seek_mem(mpc_reader *p_reader, mpc_int32_t offset) {
+    mpc_reader_mem *p_mem = (mpc_reader_mem*) p_reader->data;
+    if(p_mem->magic != STDIO_MAGIC) return MPC_FALSE;
+    if(!p_mem->is_seekable) return MPC_FALSE;
+    p_mem->p_file = p_mem->p_begin + offset;
+    if( p_mem->p_file <  p_mem->p_begin ) return /* p_mem->p_file = p_mem->p_begin, */ MPC_FALSE;
+    if( p_mem->p_file >= p_mem->p_end   ) return /* p_mem->p_file = p_mem->p_end, */ MPC_FALSE;
+    return MPC_TRUE;
+}
+static mpc_int32_t
+tell_mem(mpc_reader *p_reader) {
+    mpc_reader_mem *p_mem = (mpc_reader_mem*) p_reader->data;
+    if(p_mem->magic != STDIO_MAGIC) return MPC_STATUS_FAIL;
+    return p_mem->p_file - p_mem->p_begin;
+}
+static mpc_int32_t
+get_size_mem(mpc_reader *p_reader) {
+    mpc_reader_mem *p_mem = (mpc_reader_mem*) p_reader->data;
+    if(p_mem->magic != STDIO_MAGIC) return MPC_STATUS_FAIL;
+    return p_mem->p_end - p_mem->p_begin;
+}
+static mpc_bool_t
+canseek_mem(mpc_reader *p_reader) {
+    mpc_reader_mem *p_mem = (mpc_reader_mem*) p_reader->data;
+    if(p_mem->magic != STDIO_MAGIC) return MPC_FALSE;
+    return p_mem->is_seekable;
+}
+
+mpc_status
+mpc_reader_init_mem(mpc_reader * p_reader, const void * p_file, size_t size )
+{
+    mpc_reader tmp_reader; mpc_reader_mem *p_mem;
+
+    if( !p_file ) return MPC_STATUS_FAIL;
+    if( !size ) return MPC_STATUS_FAIL;
+
+    p_mem = NULL;
+    memset(&tmp_reader, 0, sizeof tmp_reader);
+    p_mem = (mpc_reader_mem *)malloc(sizeof *p_mem);
+    if(!p_mem) return MPC_STATUS_FAIL;
+    memset(p_mem, 0, sizeof *p_mem);
+
+    p_mem->magic  = STDIO_MAGIC;
+    p_mem->p_file =
+    p_mem->p_begin = ( unsigned char * )( p_file );
+    p_mem->p_end =   ( unsigned char * )( p_file ) + size;
+    p_mem->is_seekable = MPC_TRUE;
+
+    tmp_reader.data     = p_mem;
+    tmp_reader.canseek  = canseek_mem;
+    tmp_reader.get_size = get_size_mem;
+    tmp_reader.read     = read_mem;
+    tmp_reader.seek     = seek_mem;
+    tmp_reader.tell     = tell_mem;
+
+    *p_reader = tmp_reader;
+    return MPC_STATUS_OK;
+}
+void
+mpc_reader_exit_mem(mpc_reader *p_reader)
+{
+    mpc_reader_mem *p_mem = (mpc_reader_mem*) p_reader->data;
+    if(p_mem->magic != STDIO_MAGIC) return;
+    free(p_mem);
+    p_reader->data = NULL;
+}
+}
+
+
 #include "wave.hpp"
 
 namespace {
@@ -572,6 +666,112 @@ bool sound::load( const std::string &type, const void *data, size_t size ) {
 
         stb_vorbis_close(oss);
     }
+#if 1
+    else
+    if( type == "mpc" ) {
+        const char *error = 0;
+
+        mpc_reader reader;
+        mpc_demux* demux;
+        mpc_streaminfo si;
+        mpc_status err;
+        mpc_bool_t info = MPC_FALSE, is_wav_output = MPC_FALSE, check = MPC_FALSE;
+        MPC_SAMPLE_FORMAT sample_buffer[MPC_DECODER_BUFFER_LENGTH];
+        int total_samples;
+
+        err = mpc_reader_init_mem( &reader, (unsigned char *)data, size );
+        if(err < 0) return "cant read mpc info", false;
+
+        demux = mpc_demux_init(&reader);
+        if(!demux) return "cant init mpc demux", false;
+        mpc_demux_get_info(demux,  &si);
+
+        {
+        mpc_streaminfo *info = &si;
+        int time = (int) mpc_streaminfo_get_length(info);
+        int minutes = time / 60;
+        int seconds = time % 60;
+
+        if( const bool verbose = false ) {
+        //fprintf(stderr, "file: %s\n", filename);
+        fprintf(stderr, "stream version %d\n", info->stream_version);
+        fprintf(stderr, "encoder: %s\n", info->encoder);
+        fprintf(stderr, "profile: %s (q=%0.2f)\n", info->profile_name, info->profile - 5);
+        fprintf(stderr, "PNS: %s\n", info->pns == 0xFF ? "unknow" : info->pns ? "on" : "off");
+        fprintf(stderr, "mid/side stereo: %s\n", info->ms ? "on" : "off");
+        fprintf(stderr, "gapless: %s\n", info->is_true_gapless ? "on" : "off");
+        fprintf(stderr, "average bitrate: %6.1f kbps\n", info->average_bitrate * 1.e-3);
+        fprintf(stderr, "samplerate: %d Hz\n", info->sample_freq);
+        fprintf(stderr, "channels: %d\n", info->channels);
+        fprintf(stderr, "length: %d:%.2d (%u samples)\n", minutes, seconds, (mpc_uint32_t)mpc_streaminfo_get_length_samples(info));
+        fprintf(stderr, "file size: %d Bytes\n", info->total_file_length);
+        fprintf(stderr, "track peak: %2.2f dB\n", info->peak_title / 256.f);
+        fprintf(stderr, "track gain: %2.2f dB / %2.2f dB\n", info->gain_title / 256.f, info->gain_title == 0 ? 0 : 64.82f - info->gain_title / 256.f);
+        fprintf(stderr, "album peak: %2.2f dB\n", info->peak_album / 256.f);
+        fprintf(stderr, "album gain: %2.2f dB / %2.2f dB\n", info->gain_album / 256.f, info->gain_album == 0 ? 0 : 64.82f - info->gain_album / 256.f);
+        fprintf(stderr, "\n");
+        }
+
+        this->format = info->channels == 1 ? AL_FORMAT_MONO16 : AL_FORMAT_STEREO16;
+        this->sampleRate = info->sample_freq;
+
+        this->size = (((mpc_uint32_t)mpc_streaminfo_get_length_samples(info)) * info->channels );
+        this->samples = new short[this->size];
+        this->size *= sizeof(short);
+//      memset( this->samples, 0, this->size );
+        }
+
+        total_samples = 0;
+        while(MPC_TRUE)
+        {
+            mpc_frame_info frame;
+
+            frame.buffer = sample_buffer;
+            if (check)
+                demux->d->samples_to_skip = MPC_FRAME_LENGTH + MPC_DECODER_SYNTH_DELAY;
+            err = mpc_demux_decode(demux, &frame);
+            if(frame.bits == -1) break;
+
+            int MPC_DECODER_BUFFER_LENGTH = frame.samples * si.channels;
+            mpc_int16_t *tmp_buff = (mpc_int16_t *)( &this->samples[total_samples*2] );
+
+    #ifdef MPC_FIXED_POINT
+                for( int i = 0; i < MPC_DECODER_BUFFER_LENGTH; i++) {
+                    int tmp = sample_buffer[i] >> MPC_FIXED_POINT_FRACTPART;
+                    if (tmp > ((1 << 15) - 1)) tmp = ((1 << 15) - 1);
+                    if (tmp < -(1 << 15)) tmp = -(1 << 15);
+                    tmp_buff[i] = tmp;
+                }
+    #else
+                for( int i = 0; i < MPC_DECODER_BUFFER_LENGTH; i++) {
+                    int tmp = sample_buffer[i] * 32768;
+                    if( sample_buffer[i] >= 8388607.f / 8388608.f ) tmp = 32767;
+                    if( sample_buffer[i] < -1.f ) tmp = -32768;
+                    tmp_buff[i] = tmp;
+                }
+    #endif
+
+            total_samples += frame.samples;
+        }
+
+        if (err != MPC_STATUS_OK) {
+            error = "An error occured while decoding .mpc\n";
+        }
+        else {
+            error = "No error found\n";
+            error = 0;
+        }
+
+        mpc_demux_exit(demux);
+        mpc_reader_exit_mem(&reader);
+
+        if( error ) {
+            if( this->samples ) delete [] this->samples, this->samples = 0;
+            return "something went wrong while decoding .mpc", false;
+        } else {
+        }
+    }
+#endif
 #if 0
     else
     if( type == "wav" ) {
@@ -580,6 +780,8 @@ bool sound::load( const std::string &type, const void *data, size_t size ) {
         alutLoadWAVFile(pathfile, &this->format, &data, &this->size, &this->sampleRate, &al_bool);
         this->samples = (short *) data;
     }
+#endif
+#if 0
     else
     if( type == "opus" ) {
         int error;

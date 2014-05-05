@@ -11,14 +11,22 @@ endif(MSVC)
 include_directories( "./" )
 
 include_directories( "deps/openal/include" )
+include_directories( "deps/musepack/include" )
 include_directories( "deps/stb_vorbis" )
 
 add_subdirectory("deps/openal")
 add_subdirectory("deps/stb_vorbis")
+add_subdirectory("deps/musepack")
 
 file(GLOB WAVELIB_SRCS *.cpp *.hpp *.inl)
 add_library(wave-static STATIC ${WAVELIB_SRCS})
 
 add_executable(sample              sample.cc)
-target_link_libraries(sample       wave-static openal stb_vorbis)
-
+target_link_libraries(sample       wave-static
+    # openAL
+    openal
+    # ogg vorbis
+    stb_vorbis
+    # musepack
+    mpcdec_static
+)

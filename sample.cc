@@ -3,8 +3,10 @@
 
 int main( int argc, char **argv ) {
 
-    if( argc != 2 )
-        return std::cerr << "Usage: " << argv[0] << " file.ogg" << std::endl, -1;
+    if( argc != 2 ) {
+               std::cerr << "Usage: " << argv[0] << " file.ogg" << std::endl;
+        return std::cerr << "Usage: " << argv[0] << " file.mpc" << std::endl, -1;
+    }
 
     // enumerate audio devices
     for( auto &it : wave::enumerate() )

@@ -2,22 +2,20 @@ wave
 ====
 
 - Wave is a lightweight 3D sound wrapper for OpenAL. Written in C++11.
-- All dependencies are included (both OpenAL and STB_Vorbis by Sean Barrett).
+- Wave decodes both OGG (.ogg) and MusePack (.mpc) file formats.
+- All dependencies included: OpenAL Soft, MusePack, STB_Vorbis.
 - Cross-platform. Builds on Windows/Linux. Compiles on g++/msvc.
 - Tiny. One header and one source file.
-- OGG decoding support.
 - MIT licensed.
 
-sample
-------
-
+### sample
 ```c++
 #include <iostream>
 #include "wave.hpp"
 
 int main( int argc, char **argv ) {
     if( argc != 2 )
-        return std::cerr << "Usage: " << argv[0] << " file.ogg" << std::endl, -1;
+        return std::cerr << "Usage: " << argv[0] << " file" << std::endl, -1;
 
     // enumerate audio devices
     for( auto &it : wave::enumerate() )
@@ -58,7 +56,8 @@ int main( int argc, char **argv ) {
 }
 ```
 
-note
-----
-
-[OGG sample from wikipedia](http://upload.wikimedia.org/wikipedia/en/4/45/ACDC_-_Back_In_Black-sample.ogg)
+### external links
+* [MusePack library](http://musepack.org) by Andree Buschmann and Frank Klemm.
+* [STB_Vorbis library](http://nothings.org) by Sean Barrett.
+* [OpenAL Soft library](http://kcat.strangesoft.net/openal.html) by Chris Robinson.
+* [OGG sample from wikipedia.](http://upload.wikimedia.org/wikipedia/en/4/45/ACDC_-_Back_In_Black-sample.ogg)
