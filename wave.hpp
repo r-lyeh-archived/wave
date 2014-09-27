@@ -1,5 +1,5 @@
 // Simple OpenAL wrapper. Based on code by Emil Persson.
-// - rlyeh, 2013. MIT licensed.
+// - rlyeh, 2013. BOOST licensed.
 // @todo: doppler: alDopplerFactor, alSpeedOfSound
 
 #pragma once

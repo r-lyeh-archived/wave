@@ -6,7 +6,7 @@ wave
 - All dependencies included: OpenAL Soft, MusePack, STB_Vorbis.
 - Cross-platform. Builds on Windows/Linux. Compiles on g++/msvc.
 - Tiny. One header and one source file.
-- MIT licensed.
+- BOOST licensed.
 
 ### sample
 ```c++
